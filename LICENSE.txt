@@ -13,3 +13,5 @@ http://creativecommons.org/licenses/by/4.0/
 Note: This is a personal fork of donnemartin/system-design-primer used for
 learning and experimentation. All original content remains under the above
 license. Any additions or modifications I make are also shared under CC BY 4.0.
+
+Forked: 2024. Personal study notes and annotations added throughout.
