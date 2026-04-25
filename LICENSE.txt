@@ -7,3 +7,9 @@ Copyright 2017 Donne Martin
 Creative Commons Attribution 4.0 International License (CC BY 4.0)
 
 http://creativecommons.org/licenses/by/4.0/
+
+---
+
+Note: This is a personal fork of donnemartin/system-design-primer used for
+learning and experimentation. All original content remains under the above
+license. Any additions or modifications I make are also shared under CC BY 4.0.
