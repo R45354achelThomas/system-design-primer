@@ -1,117 +1,136 @@
-from abc import ABCMeta, abstractmethod
+"""Implementation of a deck of cards for object-oriented design.
+
+This module provides classes to represent a standard 52-card deck,
+including suits, card ranks, individual cards, and a deck with
+shuffle and deal functionality.
+"""
+
+import random
 from enum import Enum
-import sys
 
 
 class Suit(Enum):
+    """Represents the four suits in a standard deck."""
+    CLUBS = 0
+    DIAMONDS = 1
+    HEARTS = 2
+    SPADES = 3
 
-    HEART = 0
-    DIAMOND = 1
-    CLUBS = 2
-    SPADE = 3
 
+class Card:
+    """Represents a single playing card with a suit and value."""
 
-class Card(metaclass=ABCMeta):
+    FACE_CARDS = {1: 'Ace', 11: 'Jack', 12: 'Queen', 13: 'King'}
 
-    def __init__(self, value, suit):
+    def __init__(self, value: int, suit: Suit):
+        """Initialize a card with a value (1-13) and suit.
+
+        Args:
+            value: Integer from 1 (Ace) to 13 (King).
+            suit: A Suit enum value.
+        """
+        if not 1 <= value <= 13:
+            raise ValueError(f"Card value must be between 1 and 13, got {value}")
         self.value = value
         self.suit = suit
-        self.is_available = True
 
-    @property
-    @abstractmethod
-    def value(self):
-        pass
+    def is_face_card(self) -> bool:
+        """Return True if the card is a face card (Ace, Jack, Queen, King)."""
+        return self.value in self.FACE_CARDS
 
-    @value.setter
-    @abstractmethod
-    def value(self, other):
-        pass
+    def __repr__(self) -> str:
+        name = self.FACE_CARDS.get(self.value, str(self.value))
+        return f"{name} of {self.suit.name.capitalize()}"
 
-
-class BlackJackCard(Card):
-
-    def __init__(self, value, suit):
-        super(BlackJackCard, self).__init__(value, suit)
-
-    def is_ace(self):
-        return True if self._value == 1 else False
-
-    def is_face_card(self):
-        """Jack = 11, Queen = 12, King = 13"""
-        return True if 10 < self._value <= 13 else False
-
-    @property
-    def value(self):
-        if self.is_ace() == 1:
-            return 1
-        elif self.is_face_card():
-            return 10
-        else:
-            return self._value
-
-    @value.setter
-    def value(self, new_value):
-        if 1 <= new_value <= 13:
-            self._value = new_value
-        else:
-            raise ValueError('Invalid card value: {}'.format(new_value))
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Card):
+            return NotImplemented
+        return self.value == other.value and self.suit == other.suit
 
 
-class Hand(object):
+class Deck:
+    """Represents a standard 52-card deck.
 
-    def __init__(self, cards):
-        self.cards = cards
+    Supports shuffling, dealing single cards, and dealing hands.
+    """
 
-    def add_card(self, card):
-        self.cards.append(card)
+    def __init__(self):
+        """Initialize a full, ordered 52-card deck."""
+        self.cards = [
+            Card(value, suit)
+            for suit in Suit
+            for value in range(1, 14)
+        ]
+        self.dealt_index = 0  # Tracks the next card to be dealt
 
-    def score(self):
-        total_value = 0
-        for card in self.cards:
-            total_value += card.value
-        return total_value
+    def shuffle(self) -> None:
+        """Shuffle the remaining undealt cards in the deck."""
+        undealt = self.cards[self.dealt_index:]
+        random.shuffle(undealt)
+        self.cards[self.dealt_index:] = undealt
 
+    def deal_one(self) -> Card:
+        """Deal a single card from the top of the deck.
 
-class BlackJackHand(Hand):
+        Returns:
+            The next available Card.
 
-    BLACKJACK = 21
-
-    def __init__(self, cards):
-        super(BlackJackHand, self).__init__(cards)
-
-    def score(self):
-        min_over = sys.MAXSIZE
-        max_under = -sys.MAXSIZE
-        for score in self.possible_scores():
-            if self.BLACKJACK < score < min_over:
-                min_over = score
-            elif max_under < score <= self.BLACKJACK:
-                max_under = score
-        return max_under if max_under != -sys.MAXSIZE else min_over
-
-    def possible_scores(self):
-        """Return a list of possible scores, taking Aces into account."""
-        pass
-
-
-class Deck(object):
-
-    def __init__(self, cards):
-        self.cards = cards
-        self.deal_index = 0
-
-    def remaining_cards(self):
-        return len(self.cards) - self.deal_index
-
-    def deal_card(self):
-        try:
-            card = self.cards[self.deal_index]
-            card.is_available = False
-            self.deal_index += 1
-        except IndexError:
-            return None
+        Raises:
+            ValueError: If there are no remaining cards.
+        """
+        if not self.remaining_cards():
+            raise ValueError("No cards remaining in the deck.")
+        card = self.cards[self.dealt_index]
+        self.dealt_index += 1
         return card
 
-    def shuffle(self):
-        pass
+    def deal_hand(self, number: int) -> list:
+        """Deal a hand of the specified number of cards.
+
+        Args:
+            number: The number of cards to deal.
+
+        Returns:
+            A list of Card objects.
+
+        Raises:
+            ValueError: If there are not enough cards remaining.
+        """
+        if self.remaining_cards() < number:
+            raise ValueError(
+                f"Not enough cards: requested {number}, "
+                f"but only {self.remaining_cards()} remaining."
+            )
+        hand = self.cards[self.dealt_index: self.dealt_index + number]
+        self.dealt_index += number
+        return hand
+
+    def remaining_cards(self) -> int:
+        """Return the number of undealt cards remaining."""
+        return len(self.cards) - self.dealt_index
+
+    def reset(self) -> None:
+        """Reset the deck so all cards are available again."""
+        self.dealt_index = 0
+
+    def __len__(self) -> int:
+        return self.remaining_cards()
+
+    def __repr__(self) -> str:
+        return f"Deck({self.remaining_cards()} cards remaining)"
+
+
+if __name__ == '__main__':
+    deck = Deck()
+    print(f"Created: {deck}")
+
+    deck.shuffle()
+    print("Deck shuffled.")
+
+    hand = deck.deal_hand(5)
+    print(f"Dealt hand: {hand}")
+    print(f"Remaining: {deck}")
+
+    card = deck.deal_one()
+    print(f"Dealt one card: {card}")
+    print(f"Remaining: {deck}")
