@@ -1,122 +1,151 @@
-from abc import ABCMeta, abstractmethod
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Call Center Object Oriented Design
+
+This module implements a call center simulation with employees at different
+levels: Respondent, Manager, and Director. Calls are routed to the first
+available employee, escalating up the hierarchy if needed.
+
+Source: https://github.com/donnemartin/system-design-primer
+"""
+
 from collections import deque
 from enum import Enum
 
 
 class Rank(Enum):
-
-    OPERATOR = 0
-    SUPERVISOR = 1
+    RESPONDENT = 0
+    MANAGER = 1
     DIRECTOR = 2
 
 
-class Employee(metaclass=ABCMeta):
+class Call:
+    """Represents an incoming call to the call center."""
 
-    def __init__(self, employee_id, name, rank, call_center):
+    def __init__(self, caller_id: str):
+        self.caller_id = caller_id
+        self.rank = Rank.RESPONDENT
+        self.employee = None
+
+    def set_employee(self, employee: 'Employee'):
+        self.employee = employee
+
+    def __repr__(self):
+        return f'Call(caller_id={self.caller_id}, rank={self.rank})'
+
+
+class Employee:
+    """Base class representing a call center employee."""
+
+    def __init__(self, employee_id: int, name: str, rank: Rank, call_center: 'CallCenter'):
         self.employee_id = employee_id
         self.name = name
         self.rank = rank
-        self.call = None
         self.call_center = call_center
+        self.current_call = None
 
-    def take_call(self, call):
-        """Assume the employee will always successfully take the call."""
-        self.call = call
-        self.call.employee = self
-        self.call.state = CallState.IN_PROGRESS
+    def is_available(self) -> bool:
+        return self.current_call is None
+
+    def take_call(self, call: Call):
+        """Assign a call to this employee."""
+        if not self.is_available():
+            raise Exception(f'{self.name} is already on a call.')
+        call.set_employee(self)
+        self.current_call = call
+        print(f'{self.rank.name} {self.name} is handling call from {call.caller_id}')
 
     def complete_call(self):
-        self.call.state = CallState.COMPLETE
-        self.call_center.notify_call_completed(self.call)
-
-    @abstractmethod
-    def escalate_call(self):
-        pass
-
-    def _escalate_call(self):
-        self.call.state = CallState.READY
-        call = self.call
-        self.call = None
-        self.call_center.notify_call_escalated(call)
-
-
-class Operator(Employee):
-
-    def __init__(self, employee_id, name):
-        super(Operator, self).__init__(employee_id, name, Rank.OPERATOR)
+        """Mark the current call as complete and check for queued calls."""
+        if self.current_call is None:
+            return
+        print(f'{self.rank.name} {self.name} completed call from {self.current_call.caller_id}')
+        self.current_call = None
+        self.call_center.notify_available(self)
 
     def escalate_call(self):
-        self.call.level = Rank.SUPERVISOR
-        self._escalate_call()
+        """Escalate the current call to a higher-ranked employee."""
+        if self.current_call is None:
+            return
+        call = self.current_call
+        self.current_call = None
+        call.rank = Rank(self.rank.value + 1)
+        self.call_center.dispatch_call(call)
+
+    def __repr__(self):
+        return f'{self.rank.name}({self.name})'
 
 
-class Supervisor(Employee):
+class Respondent(Employee):
+    def __init__(self, employee_id, name, call_center):
+        super().__init__(employee_id, name, Rank.RESPONDENT, call_center)
 
-    def __init__(self, employee_id, name):
-        super(Operator, self).__init__(employee_id, name, Rank.SUPERVISOR)
 
-    def escalate_call(self):
-        self.call.level = Rank.DIRECTOR
-        self._escalate_call()
+class Manager(Employee):
+    def __init__(self, employee_id, name, call_center):
+        super().__init__(employee_id, name, Rank.MANAGER, call_center)
 
 
 class Director(Employee):
-
-    def __init__(self, employee_id, name):
-        super(Operator, self).__init__(employee_id, name, Rank.DIRECTOR)
-
-    def escalate_call(self):
-        raise NotImplementedError('Directors must be able to handle any call')
+    def __init__(self, employee_id, name, call_center):
+        super().__init__(employee_id, name, Rank.DIRECTOR, call_center)
 
 
-class CallState(Enum):
+class CallCenter:
+    """Manages employees and dispatches incoming calls."""
 
-    READY = 0
-    IN_PROGRESS = 1
-    COMPLETE = 2
+    def __init__(self):
+        self.employees = {
+            Rank.RESPONDENT: [],
+            Rank.MANAGER: [],
+            Rank.DIRECTOR: [],
+        }
+        self.call_queue = {
+            Rank.RESPONDENT: deque(),
+            Rank.MANAGER: deque(),
+            Rank.DIRECTOR: deque(),
+        }
+
+    def add_employee(self, employee: Employee):
+        self.employees[employee.rank].append(employee)
+
+    def dispatch_call(self, call: Call):
+        """Dispatch a call to the first available employee at the required rank."""
+        for rank in list(Rank)[call.rank.value:]:
+            for employee in self.employees[rank]:
+                if employee.is_available():
+                    employee.take_call(call)
+                    return
+        # No one available — queue the call
+        print(f'No available employee for {call}. Queuing call.')
+        self.call_queue[call.rank].append(call)
+
+    def notify_available(self, employee: Employee):
+        """Called when an employee becomes available; assign queued calls if any."""
+        queue = self.call_queue[employee.rank]
+        if queue:
+            call = queue.popleft()
+            employee.take_call(call)
 
 
-class Call(object):
+if __name__ == '__main__':
+    center = CallCenter()
 
-    def __init__(self, rank):
-        self.state = CallState.READY
-        self.rank = rank
-        self.employee = None
+    r1 = Respondent(1, 'Alice', center)
+    r2 = Respondent(2, 'Bob', center)
+    m1 = Manager(3, 'Carol', center)
+    d1 = Director(4, 'Dave', center)
 
+    for emp in [r1, r2, m1, d1]:
+        center.add_employee(emp)
 
-class CallCenter(object):
+    call1 = Call('customer_001')
+    call2 = Call('customer_002')
+    call3 = Call('customer_003')
 
-    def __init__(self, operators, supervisors, directors):
-        self.operators = operators
-        self.supervisors = supervisors
-        self.directors = directors
-        self.queued_calls = deque()
+    center.dispatch_call(call1)
+    center.dispatch_call(call2)
+    center.dispatch_call(call3)  # Should be queued
 
-    def dispatch_call(self, call):
-        if call.rank not in (Rank.OPERATOR, Rank.SUPERVISOR, Rank.DIRECTOR):
-            raise ValueError('Invalid call rank: {}'.format(call.rank))
-        employee = None
-        if call.rank == Rank.OPERATOR:
-            employee = self._dispatch_call(call, self.operators)
-        if call.rank == Rank.SUPERVISOR or employee is None:
-            employee = self._dispatch_call(call, self.supervisors)
-        if call.rank == Rank.DIRECTOR or employee is None:
-            employee = self._dispatch_call(call, self.directors)
-        if employee is None:
-            self.queued_calls.append(call)
-
-    def _dispatch_call(self, call, employees):
-        for employee in employees:
-            if employee.call is None:
-                employee.take_call(call)
-                return employee
-        return None
-
-    def notify_call_escalated(self, call):
-        pass
-
-    def notify_call_completed(self, call):
-        pass
-
-    def dispatch_queued_call_to_newly_freed_employee(self, call, employee):
-        pass
+    r1.complete_call()  # Should pick up queued call3
