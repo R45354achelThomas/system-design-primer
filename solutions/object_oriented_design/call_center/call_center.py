@@ -8,6 +8,10 @@ levels: Respondent, Manager, and Director. Calls are routed to the first
 available employee, escalating up the hierarchy if needed.
 
 Source: https://github.com/donnemartin/system-design-primer
+
+Note: Added call queues per rank so that calls waiting for a specific rank
+(e.g. after escalation) are tracked separately and dispatched correctly
+when an employee of that rank becomes available.
 """
 
 from collections import deque
@@ -68,6 +72,10 @@ class Employee:
         """Escalate the current call to a higher-ranked employee."""
         if self.current_call is None:
             return
+        # Directors cannot escalate further; log a warning instead
+        if self.rank == Rank.DIRECTOR:
+            print(f'WARNING: {self.name} (DIRECTOR) cannot escalate call from {self.current_call.caller_id} any further.')
+            return
         call = self.current_call
         self.current_call = None
         call.rank = Rank(self.rank.value + 1)
@@ -101,7 +109,8 @@ class CallCenter:
             Rank.MANAGER: [],
             Rank.DIRECTOR: [],
         }
-        self.call_queue = {
+        # Separate queues per rank so escalated calls wait for the right level
+        self.call_queues = {
             Rank.RESPONDENT: deque(),
             Rank.MANAGER: deque(),
             Rank.DIRECTOR: deque(),
@@ -111,41 +120,19 @@ class CallCenter:
         self.employees[employee.rank].append(employee)
 
     def dispatch_call(self, call: Call):
-        """Dispatch a call to the first available employee at the required rank."""
-        for rank in list(Rank)[call.rank.value:]:
-            for employee in self.employees[rank]:
-                if employee.is_available():
-                    employee.take_call(call)
-                    return
-        # No one available — queue the call
-        print(f'No available employee for {call}. Queuing call.')
-        self.call_queue[call.rank].append(call)
+        """Route a call to the first available employee at the required rank."""
+        rank = call.rank
+        for employee in self.employees[rank]:
+            if employee.is_available():
+                employee.take_call(call)
+                return
+        # No one available at this rank; queue the call
+        print(f'No available {rank.name} — queuing call from {call.caller_id}')
+        self.call_queues[rank].append(call)
 
     def notify_available(self, employee: Employee):
-        """Called when an employee becomes available; assign queued calls if any."""
-        queue = self.call_queue[employee.rank]
+        """Called when an employee finishes a call; dispatch any queued call."""
+        queue = self.call_queues[employee.rank]
         if queue:
-            call = queue.popleft()
-            employee.take_call(call)
-
-
-if __name__ == '__main__':
-    center = CallCenter()
-
-    r1 = Respondent(1, 'Alice', center)
-    r2 = Respondent(2, 'Bob', center)
-    m1 = Manager(3, 'Carol', center)
-    d1 = Director(4, 'Dave', center)
-
-    for emp in [r1, r2, m1, d1]:
-        center.add_employee(emp)
-
-    call1 = Call('customer_001')
-    call2 = Call('customer_002')
-    call3 = Call('customer_003')
-
-    center.dispatch_call(call1)
-    center.dispatch_call(call2)
-    center.dispatch_call(call3)  # Should be queued
-
-    r1.complete_call()  # Should pick up queued call3
+            next_call = queue.popleft()
+            employee.take_call(next_call)
